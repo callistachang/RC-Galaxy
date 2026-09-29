@@ -23,6 +23,54 @@ const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 
 const planetRadius = 0.5;
+
+const terrainParams = {
+    seed: 1,
+    numOctaves: 6,
+    baseAmp: 0.08,
+    baseFreq: 1.0,
+    lacunarity: 2.0,   // freq multiplier per octave
+    persistence: 0.6,  // amp multiplier per octave
+};
+
+// color stops along the normalized height range (0 = lowest, 1 = highest).
+// keep them sorted by pos; heights between two stops blend between their colors
+const palettes = {
+    earth: [
+        { name: 'deep water',    color: '#1a3a6b', pos: 0.39 },
+        { name: 'shallow water', color: '#2f6fb0', pos: 0.45 },
+        { name: 'sand',          color: '#e0d38a', pos: 0.53 },
+        { name: 'grass',         color: '#4a8f3a', pos: 0.61 },
+        { name: 'forest',        color: '#11461e', pos: 0.7 },
+        { name: 'rock',          color: '#76736f', pos: 0.85 },
+        { name: 'snow',          color: '#b5b5b5', pos: 0.98 },
+    ],
+    desert: [
+        { name: 'deep water',    color: '#ba772c', pos: 0.0 },
+        { name: 'shallow water', color: '#a48f41', pos: 0.35 },
+        { name: 'sand',          color: '#ca974e', pos: 0.42 },
+        { name: 'grass',         color: '#ba8b26', pos: 0.47 },
+        { name: 'forest',        color: '#88540c', pos: 0.6 },
+        { name: 'rock',          color: '#634221', pos: 0.75 },
+        { name: 'snow',          color: '#443217', pos: 0.9 },
+    ],
+    ice: [
+        { name: 'deep water',    color: '#969da6', pos: 0.0 },
+        { name: 'shallow water', color: '#6f8295', pos: 0.35 },
+        { name: 'sand',          color: '#9fa4bc', pos: 0.42 },
+        { name: 'grass',         color: '#616a8f', pos: 0.47 },
+        { name: 'forest',        color: '#344965', pos: 0.6 },
+        { name: 'rock',          color: '#7f7f90', pos: 0.75 },
+        { name: 'snow',          color: '#b7b8bd', pos: 0.9 },
+    ],
+};
+
+const paletteParams = { palette: 'earth' };
+// the active palette; the GUI edits it in place, so tweaks stick around if you
+// switch away and back (until reload)
+let terrainColors = palettes[paletteParams.palette];
+
+
 // IcosahedronGeometry is non-indexed (every triangle has its own vertices), so
 // computeVertexNormals() would just give face normals = flat shading. Merge
 // duplicate vertices so neighbouring triangles share them and normals get averaged.
@@ -50,12 +98,24 @@ const planetFragmentShader = /* glsl */ `
     #include <common>
     #include <lights_pars_begin>
 
+    uniform float uBaseAmp;
+    uniform vec3 uColors[NUM_COLORS];
+    uniform float uStops[NUM_COLORS];
+
     varying float vHeight;
     varying vec3 vNormal;
 
     void main() {
+        float height = clamp(0.5 * (vHeight / max(uBaseAmp, 1e-5)) + 0.5, 0.0, 1.0);
 
-        vec3 baseColor = vec3(vHeight + 0.1);
+        // walk up the stops: t is 1 once we're past stop i, 0 before stop i-1, and
+        // ramps between them, so only the segment containing height actually blends.
+        // below the first stop -> first color, above the last stop -> last color
+        vec3 baseColor = uColors[0];
+        for (int i = 1; i < NUM_COLORS; i++) {
+            float t = clamp((height - uStops[i - 1]) / max(uStops[i] - uStops[i - 1], 1e-5), 0.0, 1.0);
+            baseColor = mix(baseColor, uColors[i], t);
+        }
 
         // interpolation across the triangle denormalizes the normal
         vec3 normal = normalize(vNormal);
@@ -78,9 +138,17 @@ const planetFragmentShader = /* glsl */ `
 `;
 
 const planetMat = new THREE.ShaderMaterial({
+    // GLSL arrays need a compile-time size
+    defines: { NUM_COLORS: terrainColors.length },
+    // note: merge() clones these, so update via planetMat.uniforms, not the objects here
     uniforms: THREE.UniformsUtils.merge([
         THREE.UniformsLib.lights,
-        { uRadius: { value: planetRadius }}
+        {
+            uRadius: { value: planetRadius },
+            uBaseAmp: { value: terrainParams.baseAmp },
+            uColors: { value: terrainColors.map((c) => new THREE.Color(c.color)) },
+            uStops: { value: terrainColors.map((c) => c.pos) },
+        }
     ]),
     vertexShader: planetVertexShader,
     fragmentShader: planetFragmentShader,
@@ -90,6 +158,7 @@ const planetWireMat = new THREE.MeshBasicMaterial({color: 0x000000, transparent:
 const planetMesh = new THREE.Mesh(planetGeo, planetMat);
 const planetWireMesh = new THREE.Mesh(planetGeo, planetWireMat);
 planetWireMesh.scale.set(1.001, 1.001, 1.001);
+planetWireMesh.visible = false;
 const planetGroup = new THREE.Group();
 planetGroup.add(planetMesh);
 planetGroup.add(planetWireMesh);
@@ -99,14 +168,6 @@ const positionAttribute = planetMesh.geometry.getAttribute("position");
 const basePositions = positionAttribute.array.slice();
 let vertex = new THREE.Vector3();
 
-const terrainParams = {
-    seed: 1,
-    numOctaves: 6,
-    baseAmp: 0.08,
-    baseFreq: 1.0,
-    lacunarity: 2.0,   // freq multiplier per octave
-    persistence: 0.6,  // amp multiplier per octave
-};
 
 // small seedable PRNG so the same seed always gives the same planet
 function mulberry32(a) {
@@ -144,6 +205,9 @@ function generateTerrain() {
         positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
     }
 
+    // keep the shader's height normalization in sync with the slider
+    planetMat.uniforms.uBaseAmp.value = baseAmp;
+
     positionAttribute.needsUpdate = true;
     planetMesh.geometry.computeVertexNormals();
     planetMesh.geometry.computeBoundingBox();
@@ -163,6 +227,54 @@ gui.add(terrainParams, 'baseFreq', 0.1, 10, 0.01).onChange(generateTerrain);
 gui.add(terrainParams, 'lacunarity', 1, 4, 0.01).onChange(generateTerrain);
 gui.add(terrainParams, 'persistence', 0, 1, 0.01).onChange(generateTerrain);
 gui.add(planetWireMesh, 'visible').name('wireframe');
+
+const colorFolder = gui.addFolder('Colors');
+colorFolder.add(paletteParams, 'palette', Object.keys(palettes)).onChange((name) => {
+    applyPalette(palettes[name]);
+});
+
+// lil-gui turns function properties into buttons
+colorFolder.add({
+    savePalette() {
+        // JSON so it can be pasted straight into palettes
+        console.log(JSON.stringify(terrainColors, null, 4));
+    },
+}, 'savePalette').name('save palette');
+
+let stopControllers = [];
+
+// one color picker + pos slider per stop; rebuilt whenever the palette changes
+function buildStopControllers() {
+    stopControllers.forEach((c) => c.destroy());
+    stopControllers = [];
+
+    terrainColors.forEach((stop, i) => {
+        stopControllers.push(
+            colorFolder.addColor(stop, 'color').name(stop.name).onChange((hex) => {
+                planetMat.uniforms.uColors.value[i].set(hex);
+            }),
+            colorFolder.add(stop, 'pos', 0, 1, 0.01).name(`${stop.name} pos`).onChange((pos) => {
+                planetMat.uniforms.uStops.value[i] = pos;
+            }),
+        );
+    });
+}
+
+function applyPalette(palette) {
+    terrainColors = palette;
+    planetMat.uniforms.uColors.value = palette.map((c) => new THREE.Color(c.color));
+    planetMat.uniforms.uStops.value = palette.map((c) => c.pos);
+
+    // NUM_COLORS is baked into the shader, so a different-length palette needs a recompile
+    if (planetMat.defines.NUM_COLORS !== palette.length) {
+        planetMat.defines.NUM_COLORS = palette.length;
+        planetMat.needsUpdate = true;
+    }
+
+    buildStopControllers();
+}
+
+buildStopControllers();
 
 const ringGeo = new THREE.RingGeometry(99, 101, 100, 1);
 const ringMat = new THREE.MeshBasicMaterial({color: 0xffffff});
