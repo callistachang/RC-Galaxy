@@ -1,0 +1,29 @@
+[project]
+name = "rc-galaxy"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Callista Chang", email = "changcallista@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.3",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+rc-galaxy = "rc_galaxy:main"
+fetch-profiles = "rc_galaxy.scripts.fetch_profiles:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.9",
+]
