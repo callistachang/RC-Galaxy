@@ -1,0 +1,16 @@
+{
+  "editor.formatOnSave": false,
+  "files.trimTrailingWhitespace": false,
+  "[javascript]": {
+    "editor.formatOnSave": false
+  },
+  "[javascriptreact]": {
+    "editor.formatOnSave": false
+  },
+  "[typescript]": {
+    "editor.formatOnSave": false
+  },
+  "[typescriptreact]": {
+    "editor.formatOnSave": false
+  }
+}

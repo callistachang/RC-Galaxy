@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { createNoise3D } from 'simplex-noise';
 
 let w = window.innerWidth;
 let h = window.innerHeight;
@@ -10,19 +13,156 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target = new THREE.Vector3(0, 0, 0);
 // controls.autoRotate = true;
 
-camera.position.set(0, 200, 150);
+camera.position.set(0, 0, 2);
 camera.rotation.set(-0.8, 0, 0);
 
 const scene = new THREE.Scene();
 
-const sunGeo = new THREE.SphereGeometry(15, 32, 16);
-const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00});
+const sunGeo = new THREE.IcosahedronGeometry(15, 8);
+const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 
-const planetGeo = new THREE.SphereGeometry(8, 16, 8);
-const planetMat = new THREE.MeshBasicMaterial({color: 0x00ff00});
+const planetRadius = 0.5;
+// IcosahedronGeometry is non-indexed (every triangle has its own vertices), so
+// computeVertexNormals() would just give face normals = flat shading. Merge
+// duplicate vertices so neighbouring triangles share them and normals get averaged.
+// uv/normal are dropped first, otherwise the uv seam would stop vertices merging there.
+let planetGeo = new THREE.IcosahedronGeometry(planetRadius, 64);
+planetGeo.deleteAttribute('uv');
+planetGeo.deleteAttribute('normal');
+planetGeo = mergeVertices(planetGeo);
+planetGeo.computeVertexNormals();
+
+const planetVertexShader = /* glsl */ `
+    uniform float uRadius;
+
+    varying float vHeight;  // displacement from the base sphere surface
+    varying vec3 vNormal;
+
+    void main() {
+        vHeight = length(position) - uRadius;
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+
+const planetFragmentShader = /* glsl */ `
+    #include <common>
+    #include <lights_pars_begin>
+
+    varying float vHeight;
+    varying vec3 vNormal;
+
+    void main() {
+
+        vec3 baseColor = vec3(vHeight + 0.1);
+
+        // interpolation across the triangle denormalizes the normal
+        vec3 normal = normalize(vNormal);
+
+        vec3 light = ambientLightColor;
+
+        // lambertian diffuse; directions are in view space, same as vNormal
+        #if NUM_DIR_LIGHTS > 0
+            for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+                float diffuse = max(dot(normal, directionalLights[i].direction), 0.0);
+                light += directionalLights[i].color * diffuse;
+            }
+        #endif
+
+        gl_FragColor = vec4(baseColor * light, 1.0);
+
+        // convert linear -> sRGB output, like the built-in materials do
+        #include <colorspace_fragment>
+    }
+`;
+
+const planetMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.lights,
+        { uRadius: { value: planetRadius }}
+    ]),
+    vertexShader: planetVertexShader,
+    fragmentShader: planetFragmentShader,
+    lights: true
+});
+const planetWireMat = new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, wireframe: true})
 const planetMesh = new THREE.Mesh(planetGeo, planetMat);
-planetMesh.position.set(60, 0, 0);
+const planetWireMesh = new THREE.Mesh(planetGeo, planetWireMat);
+planetWireMesh.scale.set(1.001, 1.001, 1.001);
+const planetGroup = new THREE.Group();
+planetGroup.add(planetMesh);
+planetGroup.add(planetWireMesh);
+
+const positionAttribute = planetMesh.geometry.getAttribute("position");
+// keep the undisplaced sphere around so we can regenerate terrain from scratch
+const basePositions = positionAttribute.array.slice();
+let vertex = new THREE.Vector3();
+
+const terrainParams = {
+    seed: 1,
+    numOctaves: 6,
+    baseAmp: 0.08,
+    baseFreq: 1.0,
+    lacunarity: 2.0,   // freq multiplier per octave
+    persistence: 0.6,  // amp multiplier per octave
+};
+
+// small seedable PRNG so the same seed always gives the same planet
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
+let noise = createNoise3D(mulberry32(terrainParams.seed));
+
+function generateTerrain() {
+    const { numOctaves, baseAmp, baseFreq, lacunarity, persistence } = terrainParams;
+
+    for (let i = 0; i < positionAttribute.count; i++) {
+        vertex.fromArray(basePositions, i * 3);
+
+        let offset = 0
+        let amp = baseAmp;
+        let freq = baseFreq;
+        for (let j = 0; j < numOctaves; j++) {
+            offset += amp * noise(freq * vertex.x, freq * vertex.y, freq * vertex.z)
+            freq *= lacunarity
+            amp *= persistence
+        }
+
+        const dir = vertex.clone().normalize();
+
+        vertex.x += dir.x * offset
+        vertex.y += dir.y * offset
+        vertex.z += dir.z * offset
+
+        positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+    }
+
+    positionAttribute.needsUpdate = true;
+    planetMesh.geometry.computeVertexNormals();
+    planetMesh.geometry.computeBoundingBox();
+    planetMesh.geometry.computeBoundingSphere();
+}
+
+generateTerrain();
+
+const gui = new GUI({ title: 'Terrain' });
+gui.add(terrainParams, 'seed', 0, 1000, 1).onChange((seed) => {
+    noise = createNoise3D(mulberry32(seed));
+    generateTerrain();
+});
+gui.add(terrainParams, 'numOctaves', 1, 10, 1).onChange(generateTerrain);
+gui.add(terrainParams, 'baseAmp', 0, 0.5, 0.001).onChange(generateTerrain);
+gui.add(terrainParams, 'baseFreq', 0.1, 10, 0.01).onChange(generateTerrain);
+gui.add(terrainParams, 'lacunarity', 1, 4, 0.01).onChange(generateTerrain);
+gui.add(terrainParams, 'persistence', 0, 1, 0.01).onChange(generateTerrain);
+gui.add(planetWireMesh, 'visible').name('wireframe');
 
 const ringGeo = new THREE.RingGeometry(99, 101, 100, 1);
 const ringMat = new THREE.MeshBasicMaterial({color: 0xffffff});
@@ -31,9 +171,14 @@ ringMesh.rotation.set(Math.PI / 2, 0, 0);
 
 const ambientLight = new THREE.AmbientLight( 0x404040, 5 );
 
-scene.add(sunMesh);
-scene.add(planetMesh);
+// shines toward its target (the origin by default)
+const dirLight = new THREE.DirectionalLight( 0xffffff, 2 );
+dirLight.position.set(5, 3, 5);
+
+// scene.add(sunMesh);
+scene.add(planetGroup);
 scene.add(ambientLight);
+scene.add(dirLight);
 scene.add(ringMesh);
 
 
@@ -53,7 +198,7 @@ function animate( time ) {
     const newX = Math.sin(2 * Math.PI * time/4000) * 100;
     const newZ = Math.cos(2 * Math.PI * time/4000) * 100;
 
-    planetMesh.position.set(newX, 0, newZ)
+    // planetMesh.position.set(newX, 0, newZ)
 
 
     // mesh.rotation.x = time / 2000;
