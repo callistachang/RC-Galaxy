@@ -18,68 +18,6 @@ camera.rotation.set(-0.8, 0, 0);
 
 const scene = new THREE.Scene();
 
-const sunGeo = new THREE.IcosahedronGeometry(15, 8);
-const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
-const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-
-const planetRadius = 0.5;
-
-const terrainParams = {
-    seed: 1,
-    numOctaves: 6,
-    baseAmp: 0.08,
-    baseFreq: 1.0,
-    lacunarity: 2.0,   // freq multiplier per octave
-    persistence: 0.6,  // amp multiplier per octave
-};
-
-// color stops along the normalized height range (0 = lowest, 1 = highest).
-// keep them sorted by pos; heights between two stops blend between their colors
-const palettes = {
-    earth: [
-        { name: 'deep water',    color: '#1a3a6b', pos: 0.39 },
-        { name: 'shallow water', color: '#2f6fb0', pos: 0.45 },
-        { name: 'sand',          color: '#e0d38a', pos: 0.53 },
-        { name: 'grass',         color: '#4a8f3a', pos: 0.61 },
-        { name: 'forest',        color: '#11461e', pos: 0.7 },
-        { name: 'rock',          color: '#76736f', pos: 0.85 },
-        { name: 'snow',          color: '#b5b5b5', pos: 0.98 },
-    ],
-    desert: [
-        { name: 'deep water',    color: '#ba772c', pos: 0.0 },
-        { name: 'shallow water', color: '#a48f41', pos: 0.35 },
-        { name: 'sand',          color: '#ca974e', pos: 0.42 },
-        { name: 'grass',         color: '#ba8b26', pos: 0.47 },
-        { name: 'forest',        color: '#88540c', pos: 0.6 },
-        { name: 'rock',          color: '#634221', pos: 0.75 },
-        { name: 'snow',          color: '#443217', pos: 0.9 },
-    ],
-    ice: [
-        { name: 'deep water',    color: '#969da6', pos: 0.0 },
-        { name: 'shallow water', color: '#6f8295', pos: 0.35 },
-        { name: 'sand',          color: '#9fa4bc', pos: 0.42 },
-        { name: 'grass',         color: '#616a8f', pos: 0.47 },
-        { name: 'forest',        color: '#344965', pos: 0.6 },
-        { name: 'rock',          color: '#7f7f90', pos: 0.75 },
-        { name: 'snow',          color: '#b7b8bd', pos: 0.9 },
-    ],
-};
-
-const paletteParams = { palette: 'earth' };
-// the active palette; the GUI edits it in place, so tweaks stick around if you
-// switch away and back (until reload)
-let terrainColors = palettes[paletteParams.palette];
-
-
-// IcosahedronGeometry is non-indexed (every triangle has its own vertices), so
-// computeVertexNormals() would just give face normals = flat shading. Merge
-// duplicate vertices so neighbouring triangles share them and normals get averaged.
-// uv/normal are dropped first, otherwise the uv seam would stop vertices merging there.
-let planetGeo = new THREE.IcosahedronGeometry(planetRadius, 64);
-planetGeo.deleteAttribute('uv');
-planetGeo.deleteAttribute('normal');
-planetGeo = mergeVertices(planetGeo);
-planetGeo.computeVertexNormals();
 
 const planetVertexShader = /* glsl */ `
     uniform float uRadius;
@@ -137,36 +75,6 @@ const planetFragmentShader = /* glsl */ `
     }
 `;
 
-const planetMat = new THREE.ShaderMaterial({
-    // GLSL arrays need a compile-time size
-    defines: { NUM_COLORS: terrainColors.length },
-    // note: merge() clones these, so update via planetMat.uniforms, not the objects here
-    uniforms: THREE.UniformsUtils.merge([
-        THREE.UniformsLib.lights,
-        {
-            uRadius: { value: planetRadius },
-            uBaseAmp: { value: terrainParams.baseAmp },
-            uColors: { value: terrainColors.map((c) => new THREE.Color(c.color)) },
-            uStops: { value: terrainColors.map((c) => c.pos) },
-        }
-    ]),
-    vertexShader: planetVertexShader,
-    fragmentShader: planetFragmentShader,
-    lights: true
-});
-const planetWireMat = new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, wireframe: true})
-const planetMesh = new THREE.Mesh(planetGeo, planetMat);
-const planetWireMesh = new THREE.Mesh(planetGeo, planetWireMat);
-planetWireMesh.scale.set(1.001, 1.001, 1.001);
-planetWireMesh.visible = false;
-const planetGroup = new THREE.Group();
-planetGroup.add(planetMesh);
-planetGroup.add(planetWireMesh);
-
-const positionAttribute = planetMesh.geometry.getAttribute("position");
-// keep the undisplaced sphere around so we can regenerate terrain from scratch
-const basePositions = positionAttribute.array.slice();
-let vertex = new THREE.Vector3();
 
 
 // small seedable PRNG so the same seed always gives the same planet
@@ -179,107 +87,254 @@ function mulberry32(a) {
     }
 }
 
-let noise = createNoise3D(mulberry32(terrainParams.seed));
 
-function generateTerrain() {
-    const { numOctaves, baseAmp, baseFreq, lacunarity, persistence } = terrainParams;
 
-    for (let i = 0; i < positionAttribute.count; i++) {
-        vertex.fromArray(basePositions, i * 3);
 
-        let offset = 0
-        let amp = baseAmp;
-        let freq = baseFreq;
-        for (let j = 0; j < numOctaves; j++) {
-            offset += amp * noise(freq * vertex.x, freq * vertex.y, freq * vertex.z)
-            freq *= lacunarity
-            amp *= persistence
+class Planet {
+
+    constructor(palettes, profile) {
+        this.rng = mulberry32(profile["id"]);
+        this.palette = palettes[Math.floor(this.rng() * palettes.length)];
+        this.terrainParams = this.generateTerrainParams();
+
+        console.log(this.rng())
+        this.noise = createNoise3D(this.rng);
+    }
+
+    generateTerrainParams() {
+        return {
+            numOctaves: 1 + Math.floor(this.rng() * 6),
+            baseAmp: this.rng() / 3,
+            baseFreq: 0.1 + this.rng() * 5,
+            lacunarity: 1.5 + this.rng(),   // freq multiplier per octave
+            persistence: this.rng(),  // amp multiplier per octave
+        };
+    }
+
+    generatePlanet() {
+        const sunGeo = new THREE.IcosahedronGeometry(15, 8);
+        const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
+        // const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+
+        const planetRadius = 0.5;
+
+        // the active palette; the GUI edits it in place, so tweaks stick around if you
+        // switch away and back (until reload)
+        let terrainColors = this.palette;
+
+        // IcosahedronGeometry is non-indexed (every triangle has its own vertices), so
+        // computeVertexNormals() would just give face normals = flat shading. Merge
+        // duplicate vertices so neighbouring triangles share them and normals get averaged.
+        // uv/normal are dropped first, otherwise the uv seam would stop vertices merging there.
+        let planetGeo = new THREE.IcosahedronGeometry(planetRadius, 64);
+        planetGeo.deleteAttribute('uv');
+        planetGeo.deleteAttribute('normal');
+        planetGeo = mergeVertices(planetGeo);
+        planetGeo.computeVertexNormals();
+
+        const planetMat = new THREE.ShaderMaterial({
+            // GLSL arrays need a compile-time size
+            defines: { NUM_COLORS: terrainColors.length },
+            // note: merge() clones these, so update via planetMat.uniforms, not the objects here
+            uniforms: THREE.UniformsUtils.merge([
+                THREE.UniformsLib.lights,
+                {
+                    uRadius: { value: planetRadius },
+                    uBaseAmp: { value: this.terrainParams.baseAmp },
+                    uColors: { value: terrainColors.map((c) => new THREE.Color(c.color)) },
+                    uStops: { value: terrainColors.map((c) => c.pos) },
+                }
+            ]),
+            vertexShader: planetVertexShader,
+            fragmentShader: planetFragmentShader,
+            lights: true
+        });
+        const planetWireMat = new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, wireframe: true})
+        const planetMesh = new THREE.Mesh(planetGeo, planetMat);
+        const planetWireMesh = new THREE.Mesh(planetGeo, planetWireMat);
+        planetWireMesh.scale.set(1.001, 1.001, 1.001);
+        planetWireMesh.visible = false;
+        const planetGroup = new THREE.Group();
+        planetGroup.add(planetMesh);
+        planetGroup.add(planetWireMesh);
+
+        this.planetMat = planetMat;
+        this.planetMesh = planetMesh;
+        this.planetWireMesh = planetWireMesh;
+
+        this.generateTerrain();
+
+        return planetGroup;
+
+    }
+
+    generateTerrain() {
+        const positionAttribute = this.planetMesh.geometry.getAttribute("position");
+        // keep the undisplaced sphere around so we can regenerate terrain from scratch
+        const basePositions = positionAttribute.array.slice();
+
+        const { numOctaves, baseAmp, baseFreq, lacunarity, persistence } = this.terrainParams;
+
+        let vertex = new THREE.Vector3();
+
+        for (let i = 0; i < positionAttribute.count; i++) {
+            vertex.fromArray(basePositions, i * 3);
+
+            let offset = 0
+            let amp = baseAmp;
+            let freq = baseFreq;
+            for (let j = 0; j < numOctaves; j++) {
+                offset += amp * this.noise(freq * vertex.x, freq * vertex.y, freq * vertex.z)
+                freq *= lacunarity
+                amp *= persistence
+            }
+
+            const dir = vertex.clone().normalize();
+
+            vertex.x += dir.x * offset
+            vertex.y += dir.y * offset
+            vertex.z += dir.z * offset
+
+            positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
 
-        const dir = vertex.clone().normalize();
+        // keep the shader's height normalization in sync with the slider
+        this.planetMat.uniforms.uBaseAmp.value = baseAmp;
 
-        vertex.x += dir.x * offset
-        vertex.y += dir.y * offset
-        vertex.z += dir.z * offset
-
-        positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        positionAttribute.needsUpdate = true;
+        this.planetMesh.geometry.computeVertexNormals();
+        this.planetMesh.geometry.computeBoundingBox();
+        this.planetMesh.geometry.computeBoundingSphere();
     }
+};
 
-    // keep the shader's height normalization in sync with the slider
-    planetMat.uniforms.uBaseAmp.value = baseAmp;
+// color stops along the normalized height range (0 = lowest, 1 = highest).
+// keep them sorted by pos; heights between two stops blend between their colors
+const palettes = [
+    [
+        { name: 'deep water',    color: '#1a3a6b', pos: 0.39 },
+        { name: 'shallow water', color: '#2f6fb0', pos: 0.45 },
+        { name: 'sand',          color: '#e0d38a', pos: 0.53 },
+        { name: 'grass',         color: '#4a8f3a', pos: 0.61 },
+        { name: 'forest',        color: '#11461e', pos: 0.7 },
+        { name: 'rock',          color: '#76736f', pos: 0.85 },
+        { name: 'snow',          color: '#b5b5b5', pos: 0.98 },
+    ],
+    [
+        { name: 'deep water',    color: '#ba772c', pos: 0.0 },
+        { name: 'shallow water', color: '#a48f41', pos: 0.35 },
+        { name: 'sand',          color: '#ca974e', pos: 0.42 },
+        { name: 'grass',         color: '#ba8b26', pos: 0.47 },
+        { name: 'forest',        color: '#88540c', pos: 0.6 },
+        { name: 'rock',          color: '#634221', pos: 0.75 },
+        { name: 'snow',          color: '#443217', pos: 0.9 },
+    ],
+    [
+        { name: 'deep water',    color: '#969da6', pos: 0.0 },
+        { name: 'shallow water', color: '#6f8295', pos: 0.35 },
+        { name: 'sand',          color: '#9fa4bc', pos: 0.42 },
+        { name: 'grass',         color: '#616a8f', pos: 0.47 },
+        { name: 'forest',        color: '#344965', pos: 0.6 },
+        { name: 'rock',          color: '#7f7f90', pos: 0.75 },
+        { name: 'snow',          color: '#b7b8bd', pos: 0.9 },
+    ],
+];
 
-    positionAttribute.needsUpdate = true;
-    planetMesh.geometry.computeVertexNormals();
-    planetMesh.geometry.computeBoundingBox();
-    planetMesh.geometry.computeBoundingSphere();
-}
 
-generateTerrain();
+const res = await fetch('/server/data/profiles.json');
+const profiles = await res.json();
 
-const gui = new GUI({ title: 'Terrain' });
-gui.add(terrainParams, 'seed', 0, 1000, 1).onChange((seed) => {
-    noise = createNoise3D(mulberry32(seed));
-    generateTerrain();
-});
-gui.add(terrainParams, 'numOctaves', 1, 10, 1).onChange(generateTerrain);
-gui.add(terrainParams, 'baseAmp', 0, 0.5, 0.001).onChange(generateTerrain);
-gui.add(terrainParams, 'baseFreq', 0.1, 10, 0.01).onChange(generateTerrain);
-gui.add(terrainParams, 'lacunarity', 1, 4, 0.01).onChange(generateTerrain);
-gui.add(terrainParams, 'persistence', 0, 1, 0.01).onChange(generateTerrain);
-gui.add(planetWireMesh, 'visible').name('wireframe');
+let planetGroup = null;
 
-const colorFolder = gui.addFolder('Colors');
-colorFolder.add(paletteParams, 'palette', Object.keys(palettes)).onChange((name) => {
-    applyPalette(palettes[name]);
-});
-
-// lil-gui turns function properties into buttons
-colorFolder.add({
-    savePalette() {
-        // JSON so it can be pasted straight into palettes
-        console.log(JSON.stringify(terrainColors, null, 4));
-    },
-}, 'savePalette').name('save palette');
-
-let stopControllers = [];
-
-// one color picker + pos slider per stop; rebuilt whenever the palette changes
-function buildStopControllers() {
-    stopControllers.forEach((c) => c.destroy());
-    stopControllers = [];
-
-    terrainColors.forEach((stop, i) => {
-        stopControllers.push(
-            colorFolder.addColor(stop, 'color').name(stop.name).onChange((hex) => {
-                planetMat.uniforms.uColors.value[i].set(hex);
-            }),
-            colorFolder.add(stop, 'pos', 0, 1, 0.01).name(`${stop.name} pos`).onChange((pos) => {
-                planetMat.uniforms.uStops.value[i] = pos;
-            }),
-        );
-    });
-}
-
-function applyPalette(palette) {
-    terrainColors = palette;
-    planetMat.uniforms.uColors.value = palette.map((c) => new THREE.Color(c.color));
-    planetMat.uniforms.uStops.value = palette.map((c) => c.pos);
-
-    // NUM_COLORS is baked into the shader, so a different-length palette needs a recompile
-    if (planetMat.defines.NUM_COLORS !== palette.length) {
-        planetMat.defines.NUM_COLORS = palette.length;
-        planetMat.needsUpdate = true;
+function showProfile(id) {
+    if (planetGroup) {
+        scene.remove(planetGroup);
+        // both meshes share the geometry; dispose it and each material once
+        planetGroup.children[0].geometry.dispose();
+        planetGroup.children.forEach((mesh) => mesh.material.dispose());
     }
-
-    buildStopControllers();
+    const profile = profiles.find((p) => p.id === id);
+    planetGroup = new Planet(palettes, profile).generatePlanet();
+    scene.add(planetGroup);
 }
 
-buildStopControllers();
+// lil-gui dropdowns take a { label: value } map
+const profileOptions = Object.fromEntries(
+    profiles.map((p) => [`${p.name} (${p.id})`, p.id])
+);
+const profileParams = { id: profiles[6].id };
 
-const ringGeo = new THREE.RingGeometry(99, 101, 100, 1);
-const ringMat = new THREE.MeshBasicMaterial({color: 0xffffff});
-const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-ringMesh.rotation.set(Math.PI / 2, 0, 0);
+const gui = new GUI({ title: 'Profile' });
+gui.add(profileParams, 'id', profileOptions).name('person').onChange(showProfile);
+
+showProfile(profileParams.id);
+
+// generateTerrain();
+
+// const gui = new GUI({ title: 'Terrain' });
+// gui.add(planet.terrainParams, 'seed', 0, 1000, 1).onChange((seed) => {
+//     noise = createNoise3D(mulberry32(seed));
+//     planet.generateTerrain();
+// });
+// gui.add(planet.terrainParams, 'numOctaves', 1, 10, 1).onChange(planet.generateTerrain);
+// gui.add(planet.terrainParams, 'baseAmp', 0, 0.5, 0.001).onChange(planet.generateTerrain);
+// gui.add(planet.terrainParams, 'baseFreq', 0.1, 10, 0.01).onChange(planet.generateTerrain);
+// gui.add(planet.terrainParams, 'lacunarity', 1, 4, 0.01).onChange(planet.generateTerrain);
+// gui.add(planet.terrainParams, 'persistence', 0, 1, 0.01).onChange(planet.generateTerrain);
+// gui.add(planet.planetWireMesh, 'visible').name('wireframe');
+
+// const colorFolder = gui.addFolder('Colors');
+// colorFolder.add(paletteParams, 'palette', Object.keys(palettes)).onChange((name) => {
+//     applyPalette(palettes[name]);
+// });
+
+// // lil-gui turns function properties into buttons
+// colorFolder.add({
+//     savePalette() {
+//         // JSON so it can be pasted straight into palettes
+//         console.log(JSON.stringify(terrainColors, null, 4));
+//     },
+// }, 'savePalette').name('save palette');
+
+// let stopControllers = [];
+
+// // one color picker + pos slider per stop; rebuilt whenever the palette changes
+// function buildStopControllers() {
+//     stopControllers.forEach((c) => c.destroy());
+//     stopControllers = [];
+
+//     terrainColors.forEach((stop, i) => {
+//         stopControllers.push(
+//             colorFolder.addColor(stop, 'color').name(stop.name).onChange((hex) => {
+//                 planetMat.uniforms.uColors.value[i].set(hex);
+//             }),
+//             colorFolder.add(stop, 'pos', 0, 1, 0.01).name(`${stop.name} pos`).onChange((pos) => {
+//                 planetMat.uniforms.uStops.value[i] = pos;
+//             }),
+//         );
+//     });
+// }
+
+// function applyPalette(palette) {
+//     terrainColors = palette;
+//     planetMat.uniforms.uColors.value = palette.map((c) => new THREE.Color(c.color));
+//     planetMat.uniforms.uStops.value = palette.map((c) => c.pos);
+
+//     // NUM_COLORS is baked into the shader, so a different-length palette needs a recompile
+//     if (planetMat.defines.NUM_COLORS !== palette.length) {
+//         planetMat.defines.NUM_COLORS = palette.length;
+//         planetMat.needsUpdate = true;
+//     }
+
+//     buildStopControllers();
+// }
+
+// buildStopControllers();
+
+// const ringGeo = new THREE.RingGeometry(99, 101, 100, 1);
+// const ringMat = new THREE.MeshBasicMaterial({color: 0xffffff});
+// const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+// ringMesh.rotation.set(Math.PI / 2, 0, 0);
 
 const ambientLight = new THREE.AmbientLight( 0x404040, 5 );
 
@@ -288,10 +343,9 @@ const dirLight = new THREE.DirectionalLight( 0xffffff, 2 );
 dirLight.position.set(5, 3, 5);
 
 // scene.add(sunMesh);
-scene.add(planetGroup);
 scene.add(ambientLight);
 scene.add(dirLight);
-scene.add(ringMesh);
+// scene.add(ringMesh);
 
 
 renderer.setSize(w, h);
