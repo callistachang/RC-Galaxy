@@ -3,9 +3,6 @@ name = "rc-galaxy"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "Callista Chang", email = "changcallista@gmail.com" }
-]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
