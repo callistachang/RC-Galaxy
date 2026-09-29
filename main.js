@@ -94,11 +94,27 @@ class Planet {
 
     constructor(palettes, profile) {
         this.rng = mulberry32(profile["id"]);
-        this.palette = palettes[Math.floor(this.rng() * palettes.length)];
+        this.palette = this.generatePalette();
         this.terrainParams = this.generateTerrainParams();
 
         console.log(this.rng())
         this.noise = createNoise3D(this.rng);
+    }
+
+    generatePalette() {
+        let palette = [];
+        for (let i = 0; i < 7; i++) {
+            palette.push({
+                color: new THREE.Color(
+                    this.rng(),
+                    this.rng(),
+                    this.rng()
+                ),
+                pos: this.rng()
+            })
+        }
+        palette.sort((p) => p.pos);
+        return palette;
     }
 
     generateTerrainParams() {
@@ -112,9 +128,6 @@ class Planet {
     }
 
     generatePlanet() {
-        const sunGeo = new THREE.IcosahedronGeometry(15, 8);
-        const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
-        // const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 
         const planetRadius = 0.5;
 
@@ -141,7 +154,7 @@ class Planet {
                 {
                     uRadius: { value: planetRadius },
                     uBaseAmp: { value: this.terrainParams.baseAmp },
-                    uColors: { value: terrainColors.map((c) => new THREE.Color(c.color)) },
+                    uColors: { value: terrainColors.map((c) => c.color) },
                     uStops: { value: terrainColors.map((c) => c.pos) },
                 }
             ]),
@@ -342,7 +355,12 @@ const ambientLight = new THREE.AmbientLight( 0x404040, 5 );
 const dirLight = new THREE.DirectionalLight( 0xffffff, 2 );
 dirLight.position.set(5, 3, 5);
 
-// scene.add(sunMesh);
+const sunGeo = new THREE.IcosahedronGeometry(15, 8);
+const sunMat = new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true});
+const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+
+
+scene.add(sunMesh);
 scene.add(ambientLight);
 scene.add(dirLight);
 // scene.add(ringMesh);
