@@ -1,0 +1,192 @@
+[
+  {
+    "id": 1,
+    "first_name": "Ada",
+    "last_name": "Orbit",
+    "name": "Ada Orbit",
+    "pronouns": "she/her",
+    "slug": "1-ada-orbit",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "<p>Writing a tiny ray tracer in Rust.</p>",
+    "interests_rendered": "<p>graphics, compilers, pottery</p>",
+    "current_location": {
+      "id": 1,
+      "name": "Brooklyn, NY",
+      "short_name": null
+    },
+    "stints": [
+      {
+        "id": 101,
+        "type": "retreat",
+        "title": null,
+        "for_half_batch": false,
+        "in_progress": true,
+        "start_date": "2026-08-10",
+        "end_date": "2026-10-30",
+        "batch": {
+          "id": 183,
+          "name": "Summer 2, 2026",
+          "short_name": "S2'26",
+          "alt_name": "Summer 2 '26"
+        }
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "first_name": "Bram",
+    "last_name": "Nebula",
+    "name": "Bram Nebula",
+    "pronouns": "he/him",
+    "slug": "2-bram-nebula",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "<p>Learning Haskell by building a Datalog.</p>",
+    "interests_rendered": "<p>functional programming, music synthesis</p>",
+    "current_location": {
+      "id": 2,
+      "name": "Berlin, Germany",
+      "short_name": null
+    },
+    "stints": [
+      {
+        "id": 102,
+        "type": "retreat",
+        "title": null,
+        "for_half_batch": true,
+        "in_progress": true,
+        "start_date": "2026-09-21",
+        "end_date": "2026-10-30",
+        "batch": {
+          "id": 185,
+          "name": "Fall 2, 2026",
+          "short_name": "F2'26",
+          "alt_name": "Fall 2 '26"
+        }
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "first_name": "Cass",
+    "last_name": "Perihelion",
+    "name": "Cass Perihelion",
+    "pronouns": "they/them",
+    "slug": "3-cass-perihelion",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "<p>Distributed systems and bread.</p>",
+    "interests_rendered": "<p>databases, consensus, sourdough</p>",
+    "current_location": {
+      "id": 1,
+      "name": "Brooklyn, NY",
+      "short_name": null
+    },
+    "stints": [
+      {
+        "id": 103,
+        "type": "retreat",
+        "title": null,
+        "for_half_batch": false,
+        "in_progress": false,
+        "start_date": "2019-01-07",
+        "end_date": "2019-03-29",
+        "batch": {
+          "id": 69,
+          "name": "Winter 1, 2019",
+          "short_name": "W1'19",
+          "alt_name": "Winter 1 '19"
+        }
+      },
+      {
+        "id": 104,
+        "type": "retreat",
+        "title": null,
+        "for_half_batch": true,
+        "in_progress": false,
+        "start_date": "2023-06-05",
+        "end_date": "2023-06-30",
+        "batch": {
+          "id": 151,
+          "name": "Summer 1, 2023",
+          "short_name": "S1'23",
+          "alt_name": "Summer 1 '23"
+        }
+      }
+    ],
+    "company": {
+      "id": 1,
+      "name": "Example Corp"
+    }
+  },
+  {
+    "id": 4,
+    "first_name": "Dee",
+    "last_name": "Apoapsis",
+    "name": "Dee Apoapsis",
+    "pronouns": null,
+    "slug": "4-dee-apoapsis",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "",
+    "interests_rendered": "",
+    "stints": [
+      {
+        "id": 105,
+        "type": "retreat",
+        "title": null,
+        "for_half_batch": false,
+        "in_progress": false,
+        "start_date": "2012-06-04",
+        "end_date": "2012-08-24",
+        "batch": {
+          "id": 4,
+          "name": "Summer 2012",
+          "short_name": "S'12",
+          "alt_name": "Summer  '12"
+        }
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "first_name": "Eli",
+    "last_name": "Lagrange",
+    "name": "Eli Lagrange",
+    "pronouns": "he/they",
+    "slug": "5-eli-lagrange",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "<p>RC faculty. Ask me about anything.</p>",
+    "interests_rendered": "<p>teaching, operating systems</p>",
+    "current_location": {
+      "id": 1,
+      "name": "Brooklyn, NY",
+      "short_name": null
+    },
+    "stints": [
+      {
+        "id": 106,
+        "type": "employment",
+        "title": "Faculty",
+        "for_half_batch": false,
+        "in_progress": true,
+        "start_date": "2021-01-04",
+        "end_date": null
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "first_name": "Fen",
+    "last_name": "Umbra",
+    "name": "Fen Umbra",
+    "pronouns": "",
+    "slug": "6-fen-umbra",
+    "image_path": "https://d29xw0ra2h4o4u.cloudfront.net/assets/people/no_photo_150-445e994d9f825a8fb6fbf92e0eab7a8566139b2a201ee1aa41570a772c5e78dd.jpg",
+    "bio_rendered": "",
+    "interests_rendered": "",
+    "current_location": {
+      "id": 3,
+      "name": "Toronto, Canada",
+      "short_name": null
+    },
+    "stints": []
+  }
+]
