@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>RC Galaxy · Solar System</title>
+    <style>
+      body { margin: 0; }
+      .nav { position: absolute; top: 8px; left: 8px; z-index: 1; color: #fff; font: 13px sans-serif; }
+      .planet-label {
+        color: #fff;
+        font: 12px sans-serif;
+        text-shadow: 0 0 3px #000;
+        white-space: nowrap;
+        pointer-events: auto;  /* the label layer ignores the mouse, but labels are clickable */
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <a class="nav" href="/">← home</a>
+    <script type="module" src="/galaxy.js"></script>
+  </body>
+</html>
